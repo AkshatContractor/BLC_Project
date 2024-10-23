@@ -31,18 +31,8 @@ function App() {
             const instance = new web3Instance.eth.Contract(SimpleAuction.abi, deployedNetwork.address);
             setContract(instance);
 
-            const highestBid = await instance.methods.highestBid().call();
-            setHighestBid(web3Instance.utils.fromWei(highestBid, 'ether'));
-
-            const ended = await instance.methods.auctionEnded().call();
-            setAuctionEnded(ended);
-
-            const auctioneer = await instance.methods.auctioneer().call();
-            setAuctioneer(auctioneer);
-
-            const auctionEndTime = await instance.methods.auctionEndTime().call();
-            setAuctionEndTime(Number(auctionEndTime)); // Convert to Number
-            setRemainingTime(Number(auctionEndTime) - Math.floor(Date.now() / 1000)); // Calculate remaining time
+            // Fetch auction details
+            await fetchAuctionDetails(instance);
           } else {
             console.error(`Contract not deployed to detected network ${networkId}.`);
           }
@@ -57,8 +47,33 @@ function App() {
     initWeb3();
   }, []);
 
+  const fetchAuctionDetails = async (instance) => {
+    const highestBid = await instance.methods.highestBid().call();
+    setHighestBid(web3.utils.fromWei(highestBid, 'ether'));
+
+    const ended = await instance.methods.auctionEnded().call();
+    setAuctionEnded(ended);
+
+    const auctioneer = await instance.methods.auctioneer().call();
+    setAuctioneer(auctioneer);
+
+    const auctionEndTime = await instance.methods.auctionEndTime().call();
+    setAuctionEndTime(Number(auctionEndTime)); // Convert to Number
+    setRemainingTime(Number(auctionEndTime) - Math.floor(Date.now() / 1000)); // Calculate remaining time
+  };
+
   useEffect(() => {
     const interval = setInterval(() => {
+      if (contract) {
+        fetchAuctionDetails(contract); // Refresh auction details every 3 seconds
+      }
+    }, 3000); // Set to refresh every 3 seconds
+
+    return () => clearInterval(interval);
+  }, [contract]);
+
+  useEffect(() => {
+    const timerInterval = setInterval(() => {
       if (!auctionEnded) {
         const currentTime = Math.floor(Date.now() / 1000);
         const timeLeft = auctionEndTime - currentTime;
@@ -66,7 +81,7 @@ function App() {
       }
     }, 1000);
 
-    return () => clearInterval(interval);
+    return () => clearInterval(timerInterval);
   }, [auctionEndTime, auctionEnded]);
 
   const formatRemainingTime = (seconds) => {
@@ -82,9 +97,9 @@ function App() {
   const placeBid = async () => {
     if (contract && amount) {
       try {
-        await contract.methods.bid().send({ from: account, value: Web3.utils.toWei(amount, 'ether') });
+        await contract.methods.bid().send({ from: account, value: web3.utils.toWei(amount, 'ether') });
         const newHighestBid = await contract.methods.highestBid().call();
-        setHighestBid(Web3.utils.fromWei(newHighestBid, 'ether'));
+        setHighestBid(web3.utils.fromWei(newHighestBid, 'ether'));
       } catch (error) {
         console.error("Error placing bid:", error);
       }

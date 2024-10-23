@@ -55,4 +55,13 @@ contract SimpleAuction {
 
         auctioneer.transfer(highestBid);
     }
+
+    // New function to get remaining time in seconds
+    function remainingTime() public view returns (uint) {
+        if (block.timestamp >= auctionEndTime) {
+            return 0;
+        } else {
+            return auctionEndTime - block.timestamp;
+        }
+    }
 }

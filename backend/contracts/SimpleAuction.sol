@@ -8,10 +8,10 @@ contract SimpleAuction {
     uint public auctionEndTime;
     bool public auctionEnded;
 
-    mapping(address => uint) pendingReturns;
+    mapping(address => uint) private pendingReturns;
 
-    event AuctionEnded(address winner, uint amount);
-    event HighestBidIncreased(address bidder, uint amount);
+    event AuctionEnded(address indexed winner, uint amount);
+    event HighestBidIncreased(address indexed bidder, uint amount);
 
     constructor(uint _biddingTime) {
         auctioneer = payable(msg.sender);
@@ -22,6 +22,7 @@ contract SimpleAuction {
         require(block.timestamp < auctionEndTime, "Auction already ended.");
         require(msg.value > highestBid, "There is already a higher bid.");
 
+        // Refund the previously highest bidder
         if (highestBid != 0) {
             pendingReturns[highestBidder] += highestBid;
         }
@@ -34,9 +35,11 @@ contract SimpleAuction {
     function withdraw() public returns (bool) {
         uint amount = pendingReturns[msg.sender];
         if (amount > 0) {
-            pendingReturns[msg.sender] = 0;
-            if (!payable(msg.sender).send(amount)) {
-                pendingReturns[msg.sender] = amount;
+            // Reset the pending return before sending to prevent reentrancy attacks
+            pendingReturns[msg.sender] = 0; 
+            (bool success, ) = msg.sender.call{value: amount}("");
+            if (!success) {
+                pendingReturns[msg.sender] = amount; // Revert the state change if sending fails
                 return false;
             }
         }

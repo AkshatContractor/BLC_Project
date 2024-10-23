@@ -9,30 +9,30 @@ function App() {
   const [auctionEnded, setAuctionEnded] = useState(false);
   const [auctioneer, setAuctioneer] = useState('');
   const [amount, setAmount] = useState('');
+  const [web3, setWeb3] = useState(null);
 
   useEffect(() => {
     const initWeb3 = async () => {
       if (typeof window.ethereum !== 'undefined') {
-        const web3 = new Web3(window.ethereum);
-        
+        const web3Instance = new Web3(window.ethereum);
+        setWeb3(web3Instance);
+
         try {
           await window.ethereum.request({ method: 'eth_requestAccounts' });
-          const accounts = await web3.eth.getAccounts();
+          const accounts = await web3Instance.eth.getAccounts();
           setAccount(accounts[0]);
 
-          const networkId = await web3.eth.net.getId();
-          console.log("Detected Network ID:", networkId);
-          
-          // Check for the deployed network
+          const networkId = await web3Instance.eth.net.getId();
           const deployedNetwork = SimpleAuction.networks[networkId];
+          console.log("Network ID:", networkId);
           console.log("Deployed Network:", deployedNetwork);
   
           if (deployedNetwork) {
-            const instance = new web3.eth.Contract(SimpleAuction.abi, deployedNetwork.address);
+            const instance = new web3Instance.eth.Contract(SimpleAuction.abi, deployedNetwork.address);
             setContract(instance);
 
             const highestBid = await instance.methods.highestBid().call();
-            setHighestBid(web3.utils.fromWei(highestBid, 'ether'));
+            setHighestBid(web3Instance.utils.fromWei(highestBid, 'ether'));
 
             const ended = await instance.methods.auctionEnded().call();
             setAuctionEnded(ended);
@@ -40,7 +40,7 @@ function App() {
             const auctioneer = await instance.methods.auctioneer().call();
             setAuctioneer(auctioneer);
           } else {
-            alert(`Contract not deployed to detected network ${networkId}. Please switch to the correct network in MetaMask.`);
+            console.error(`Contract not deployed to detected network ${networkId}.`);
           }
         } catch (error) {
           console.error("Error connecting to MetaMask or getting accounts:", error);
@@ -70,7 +70,23 @@ function App() {
   const endAuction = async () => {
     if (contract) {
       try {
-        await contract.methods.endAuction().send({ from: account });
+        const auctionEndTime = await contract.methods.auctionEndTime().call();
+        const auctionEnded = await contract.methods.auctionEnded().call();
+        const currentBlock = await web3.eth.getBlock("latest");
+
+        console.log("Current Block Timestamp:", currentBlock.timestamp);
+        console.log("Auction End Time:", auctionEndTime);
+        console.log("Auction Ended:", auctionEnded);
+
+        if (currentBlock.timestamp < auctionEndTime) {
+          throw new Error("Auction has not yet ended.");
+        }
+
+        if (auctionEnded) {
+          throw new Error("Auction already ended.");
+        }
+
+        await contract.methods.endAuction().send({ from: account, gas: 3000000 });
         setAuctionEnded(true);
       } catch (error) {
         console.error("Error ending auction:", error);

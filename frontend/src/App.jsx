@@ -70,29 +70,37 @@ function App() {
   const endAuction = async () => {
     if (contract) {
       try {
+        // Get auction details
         const auctionEndTime = await contract.methods.auctionEndTime().call();
         const auctionEnded = await contract.methods.auctionEnded().call();
         const currentBlock = await web3.eth.getBlock("latest");
-
+  
         console.log("Current Block Timestamp:", currentBlock.timestamp);
         console.log("Auction End Time:", auctionEndTime);
         console.log("Auction Ended:", auctionEnded);
-
+  
+        // Check if auction has ended
         if (currentBlock.timestamp < auctionEndTime) {
           throw new Error("Auction has not yet ended.");
         }
-
+  
         if (auctionEnded) {
           throw new Error("Auction already ended.");
         }
-
-        await contract.methods.endAuction().send({ from: account, gas: 3000000 });
+  
+        // Attempt to end the auction
+        await contract.methods.endAuction().send({ from: account, gas: 4000000 });
         setAuctionEnded(true);
+        console.log("Auction ended successfully.");
       } catch (error) {
+        // Log the specific error for debugging
         console.error("Error ending auction:", error);
       }
+    } else {
+      console.error("Contract not initialized.");
     }
   };
+  
 
   return (
     <div className="container mx-auto p-4">

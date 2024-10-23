@@ -10,6 +10,8 @@ function App() {
   const [auctioneer, setAuctioneer] = useState('');
   const [amount, setAmount] = useState('');
   const [web3, setWeb3] = useState(null);
+  const [auctionEndTime, setAuctionEndTime] = useState(0);
+  const [remainingTime, setRemainingTime] = useState(0);
 
   useEffect(() => {
     const initWeb3 = async () => {
@@ -24,9 +26,7 @@ function App() {
 
           const networkId = await web3Instance.eth.net.getId();
           const deployedNetwork = SimpleAuction.networks[networkId];
-          console.log("Network ID:", networkId);
-          console.log("Deployed Network:", deployedNetwork);
-  
+
           if (deployedNetwork) {
             const instance = new web3Instance.eth.Contract(SimpleAuction.abi, deployedNetwork.address);
             setContract(instance);
@@ -39,6 +39,10 @@ function App() {
 
             const auctioneer = await instance.methods.auctioneer().call();
             setAuctioneer(auctioneer);
+
+            const auctionEndTime = await instance.methods.auctionEndTime().call();
+            setAuctionEndTime(Number(auctionEndTime)); // Convert to Number
+            setRemainingTime(Number(auctionEndTime) - Math.floor(Date.now() / 1000)); // Calculate remaining time
           } else {
             console.error(`Contract not deployed to detected network ${networkId}.`);
           }
@@ -49,10 +53,32 @@ function App() {
         alert("Please install MetaMask to use this application.");
       }
     };
-  
+
     initWeb3();
   }, []);
-  
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (!auctionEnded) {
+        const currentTime = Math.floor(Date.now() / 1000);
+        const timeLeft = auctionEndTime - currentTime;
+        setRemainingTime(timeLeft);
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [auctionEndTime, auctionEnded]);
+
+  const formatRemainingTime = (seconds) => {
+    if (seconds <= 0) return "Auction has ended";
+
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+
+    return `${hours}h ${minutes}m ${secs}s`;
+  };
+
   const placeBid = async () => {
     if (contract && amount) {
       try {
@@ -67,46 +93,18 @@ function App() {
     }
   };
 
-  const endAuction = async () => {
-    if (contract) {
-      try {
-        // Get auction details
-        const auctionEndTime = await contract.methods.auctionEndTime().call();
-        const auctionEnded = await contract.methods.auctionEnded().call();
-        const currentBlock = await web3.eth.getBlock("latest");
-  
-        console.log("Current Block Timestamp:", currentBlock.timestamp);
-        console.log("Auction End Time:", auctionEndTime);
-        console.log("Auction Ended:", auctionEnded);
-  
-        // Check if auction has ended
-        if (currentBlock.timestamp < auctionEndTime) {
-          throw new Error("Auction has not yet ended.");
-        }
-  
-        if (auctionEnded) {
-          throw new Error("Auction already ended.");
-        }
-  
-        // Attempt to end the auction
-        await contract.methods.endAuction().send({ from: account, gas: 4000000 });
-        setAuctionEnded(true);
-        console.log("Auction ended successfully.");
-      } catch (error) {
-        // Log the specific error for debugging
-        console.error("Error ending auction:", error);
-      }
-    } else {
-      console.error("Contract not initialized.");
-    }
-  };
-  
-
   return (
     <div className="container mx-auto p-4">
       <h1 className="text-2xl font-bold mb-4">Simple Auction Platform</h1>
       <p><strong>Auctioneer:</strong> {auctioneer}</p>
       <p><strong>Highest Bid:</strong> {highestBid} ETH</p>
+
+      {/* Display Auction End Time in IST */}
+      <p><strong>Auction End Time (IST):</strong> 
+        {new Date(auctionEndTime * 1000 + 5.5 * 60 * 60 * 1000).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} 
+      </p>
+      
+      <p><strong>Remaining Time:</strong> {formatRemainingTime(remainingTime)}</p>
 
       {!auctionEnded && (
         <div className="my-4">
@@ -126,15 +124,8 @@ function App() {
         </div>
       )}
 
-      {auctionEnded ? (
+      {auctionEnded && (
         <p className="text-green-500">The auction has ended.</p>
-      ) : (
-        <button
-          onClick={endAuction}
-          className="bg-red-500 text-white p-2 rounded"
-        >
-          End Auction
-        </button>
       )}
     </div>
   );
